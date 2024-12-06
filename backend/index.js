@@ -64,13 +64,29 @@ app.get('/create-story', async (req, res) => {
 
     // Generate the long story
     const storyPath = `${path}/story.txt`;
+    const result = await run.text();
+    fs.writeFileSync(storyPath, result); // Save the story text
     console.log(`Saved the story to ${storyPath}`);
 
-    // Return success response
+    // Generate speech file using text2speech-gptscript
+    const text2speechOpts = {
+      text: result,  // Pass the generated story text
+      voice: "en_us",  // Optional: set voice (you can change it to others like "en_uk", etc.)
+      format: "mp3",  // Optional: set format to mp3
+    };
+
+    // Run the text2speech command to generate the MP3 file
+    const speechPath = `${path}/voiceover.mp3`;
+    await g.run('github.com/nw0rn/text2speech-gptscript', text2speechOpts);
+
+    console.log(`Saved the speech to ${speechPath}`);
+
+    // Return success response with paths to story and speech files
     return res.json({
       storyPath,
       videoPath,
       video: videoWithTime,
+      speechPath,
     });
   } catch (e) {
     console.error(e);
