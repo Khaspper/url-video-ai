@@ -1,0 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background: linear-gradient(rgb(7, 57, 64) 0%, black 40%), black;
+  /* The bottom Line makes sure it doesn't repeat */
+  @apply text-white min-h-dvh;
+}
