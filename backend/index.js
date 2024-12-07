@@ -4,6 +4,11 @@ import fs from 'fs';
 import cors from 'cors';
 import { GPTScript, RunEventType } from '@gptscript-ai/gptscript';
 import 'dotenv/config';
+import OpenAI from 'openai';
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 const app = express();
 app.use(cors());
@@ -15,14 +20,14 @@ const g = new GPTScript({
 // List of Minecraft parkour video URLs and their durations in seconds
 const videoUrls = [
   { url: "https://youtu.be/85z7jqGAGcc", duration: 7210 }, // Example duration
-  { url: "https://youtu.be/i0M4ARe9v0Y", duration: 300 }, // Example duration
+  { url: "https://youtu.be/i0M4ARe9v0Y", duration: 300 },  // Example duration
   // Add more videos here with their durations
 ];
 
 // Function to generate a random time frame
 function getRandomStartTime(videoDuration) {
-  const maxStartTime = Math.max(0, videoDuration - 30); // Ensure 30 seconds left
-  return Math.floor(Math.random() * maxStartTime); // Random start time
+  const maxStartTime = Math.max(0, videoDuration - 30); // Ensure at least 30 seconds left
+  return Math.floor(Math.random() * maxStartTime);
 }
 
 app.get('/test', (req, res) => {
@@ -68,17 +73,17 @@ app.get('/create-story', async (req, res) => {
     fs.writeFileSync(storyPath, result); // Save the story text
     console.log(`Saved the story to ${storyPath}`);
 
-    // Generate speech file using text2speech-gptscript
-    const text2speechOpts = {
-      text: result,  // Pass the generated story text
-      voice: "en_us",  // Optional: set voice (you can change it to others like "en_uk", etc.)
-      format: "mp3",  // Optional: set format to mp3
-    };
-
-    // Run the text2speech command to generate the MP3 file
+    // Generate speech file using hypothetical OpenAI TTS endpoint
     const speechPath = `${path}/voiceover.mp3`;
-    await g.run('github.com/nw0rn/text2speech-gptscript', text2speechOpts);
+    const response = await openai.audio.speech.create({
+      model: "tts-1",         // Hypothetical model name
+      voice: "echo",          // Hypothetical voice name
+      input: result,          // Use the story text
+      response_format: "mp3", // Desired output format
+    });
 
+    const buffer = Buffer.from(await response.arrayBuffer());
+    fs.writeFileSync(speechPath, buffer);
     console.log(`Saved the speech to ${speechPath}`);
 
     // Return success response with paths to story and speech files

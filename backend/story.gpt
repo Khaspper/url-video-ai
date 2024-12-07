@@ -1,13 +1,9 @@
 tools: sys.write, sys.read, sys.download, sys.find
 tools: github.com/gptscript-ai/browser
-tools: github.com/nw0rn/text2speech-gptscript
 args: apiKey: ${apiKey}
 args: url: Link to the article or page
 args: dir: Directory to save the created files to
-args: videoUrl: A 30-second time-frame video URL for the story
 
 1. Browse to ${url} and read the page contents.
 2. Create a tldr text version of it for an Instagram reel or a TikTok video. No emojis, Max 300 words.
-3. Save the generated story to "${dir}/story-${INDEX}.txt".
-4. Generate speech files for "${dir}/story-${INDEX}.txt" and save it to: "${dir}/voiceover-${INDEX}". 
-   - Do not pass the file type, use the default value (`mp3`).
+3. Save the generated story to "${dir}/story.txt".
