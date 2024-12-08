@@ -5,11 +5,16 @@ import cors from 'cors';
 import { GPTScript, RunEventType } from '@gptscript-ai/gptscript';
 import 'dotenv/config';
 import OpenAI from 'openai';
+import ffmpeg from 'fluent-ffmpeg';
+import ffmpegPath from 'ffmpeg-static';
+import path from 'path';
+
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+ffmpeg.setFfmpegPath(ffmpegPath);
 const app = express();
 app.use(cors());
 
@@ -43,19 +48,9 @@ app.get('/create-story', async (req, res) => {
   console.log({ url });
 
   try {
-    // Select a single random video URL with a 30-second time frame
-    const randomVideo = videoUrls[Math.floor(Math.random() * videoUrls.length)];
-    const randomStartTime = getRandomStartTime(randomVideo.duration);
-    const videoWithTime = `${randomVideo.url}?t=${randomStartTime}`;
-    const videoPath = `${path}/video.txt`;
-
-    // Save the video URL with timestamp
-    fs.writeFileSync(videoPath, videoWithTime);
-    console.log(`Saved the video URL to ${videoPath}`);
-
-    // Pass the video URL to GPTScript
+    // Pass options to GPTScript
     const opts = {
-      input: `--url ${url} --dir ${path} --apiKey ${process.env.OPENAI_API_KEY} --videoUrl ${videoWithTime}`,
+      input: `--url ${url} --dir ${path} --apiKey ${process.env.OPENAI_API_KEY}`,
       disableCache: true,
     };
 
@@ -87,8 +82,16 @@ app.get('/create-story', async (req, res) => {
     console.log(`Saved the speech to ${speechPath}`);
 
     // Transcribe the audio using OpenAI Whisper API
-    const simplifiedTranscriptPath = `${path}/simplified_transcription.json`; // Save simplified transcription
+    const simplifiedTranscriptionPath = `${path}/simplified_transcription.json`; // Save simplified transcription
     try {
+      // Get the duration of the audio file using ffmpeg
+      const audioDuration = await new Promise((resolve, reject) => {
+        ffmpeg.ffprobe(speechPath, (err, metadata) => {
+          if (err) return reject(err);
+          resolve(metadata.format.duration); // Get the duration in seconds
+        });
+      });
+
       const transcriptionResponse = await openai.audio.transcriptions.create({
         file: fs.createReadStream(speechPath), // Pass the audio file as a stream
         model: "whisper-1",                   // Specify the Whisper model
@@ -96,18 +99,22 @@ app.get('/create-story', async (req, res) => {
       });
 
       // Simplify transcription response to include only words with their start and end times
-      const simplifiedTranscription = [];
-      transcriptionResponse.segments.forEach(segment => {
+      const simplifiedTranscription = {
+        duration: audioDuration, // Add total audio duration
+        words: [],
+      };
+
+      transcriptionResponse.segments.forEach((segment) => {
         segment.text.split(' ').forEach((word, index) => {
           const wordStart = segment.start + ((segment.end - segment.start) / segment.text.split(' ').length) * index;
           const wordEnd = wordStart + ((segment.end - segment.start) / segment.text.split(' ').length);
-          simplifiedTranscription.push({ word: word.trim(), start: wordStart, end: wordEnd });
+          simplifiedTranscription.words.push({ word: word.trim(), start: wordStart, end: wordEnd });
         });
       });
 
       // Save the simplified transcription
-      fs.writeFileSync(simplifiedTranscriptPath, JSON.stringify(simplifiedTranscription, null, 2));
-      console.log(`Saved the simplified transcription to ${simplifiedTranscriptPath}`);
+      fs.writeFileSync(simplifiedTranscriptionPath, JSON.stringify(simplifiedTranscription, null, 2));
+      console.log(`Saved the simplified transcription to ${simplifiedTranscriptionPath}`);
     } catch (transcriptionError) {
       console.error("Error transcribing audio:", transcriptionError);
     }
@@ -115,10 +122,9 @@ app.get('/create-story', async (req, res) => {
     // Return success response with paths to story, speech, and transcription files
     return res.json({
       storyPath,
-      videoPath,
-      video: videoWithTime,
       speechPath,
-      simplifiedTranscriptPath,
+      simplifiedTranscriptionPath,
+      dir,
     });
   } catch (e) {
     console.error(e);
@@ -126,4 +132,75 @@ app.get('/create-story', async (req, res) => {
   }
 });
 
+app.get('/build-video', async (req, res) => {
+  const id = '1ckuqu6z8m4faiql1';
+  const dir = './stories/' + id;
+  const videoDir = './videos/';
+
+  const inputVideo = path.join(videoDir, 'minecraft_parkour.mp4');
+  // const inputVideo = path.join(videoDir, 'videoplayback.mp4');
+  const inputAudio = path.join(dir, 'voiceover.mp3');
+  const inputTranscription = path.join(dir, 'simplified_transcription.json');
+  const outputVideoPath = path.join(dir, 'output.mp4');
+
+  // Read transcription file and parse it
+  const transcription = JSON.parse(fs.readFileSync(inputTranscription, 'utf8'));
+  const words = transcription.words;
+  const duration = transcription.duration;
+
+  // Generate a random start time for the video
+  const videoDuration = duration; // Assume 8 minutes (480 seconds), replace dynamically if needed
+  const maxStartTime = Math.max(0, videoDuration - duration);
+  const startTime = Math.floor(Math.random() * maxStartTime);
+
+  // Build the drawtext filter string
+  let drawtextFilter = '';
+  words.forEach((wordInfo) => {
+    const word = wordInfo.word.replace(/'/g, "\\'").replace(/"/g, '\\"');
+    const start = parseFloat(wordInfo.start).toFixed(2);
+    const end = parseFloat(wordInfo.end).toFixed(2);
+    drawtextFilter += `drawtext=text='${word}':fontcolor=white:fontsize=96:borderw=4:bordercolor=black:x=(w-text_w)/2:y=(h*3/4)-text_h:enable='between(t\\,${start}\\,${end})',`;
+  });
+  drawtextFilter = drawtextFilter.slice(0, -1); // Remove trailing comma
+
+  console.log(`Processing video from ${startTime}s for ${duration}s with text overlay...`);
+
+  await new Promise((resolve, reject) => {
+    ffmpeg(inputVideo)
+      .setStartTime(startTime) // Start time for the video
+      .setDuration(videoDuration)  // Clip the video to match the videoDuration
+      .input(inputAudio)          // Add the audio file as input
+      .audioCodec('aac')          // Ensure audio codec is set to AAC
+      .outputOptions([
+        '-pix_fmt', 'yuv420p', // Set pixel format for compatibility
+      ])
+      .on('start', (cmd) => {
+        console.log(`FFmpeg process started with command: ${cmd}`);
+      })
+      .on('progress', (progress) => {
+        console.log(`Processing: ${progress.percent}% done`);
+      })
+      .on('end', () => {
+        console.log(`Video processing completed. Output file saved to ${outputVideoPath}`);
+        resolve();
+      })
+      .on('error', (err) => {
+        console.error(`Error during video processing: ${err.message}`);
+        reject(err);
+      })
+      .save(outputVideoPath); // Save the output video
+  });
+
+  // Send success response
+  res.json({
+    message: 'Video processing completed successfully.',
+    outputVideoPath,
+  });
+  
+});
+
+
+
 app.listen(8080, () => console.log('Listening on port 8080'));
+
+//! FIX TEXT OVERLAY!!!!!!!!!!!!!!!!!!!!!!
