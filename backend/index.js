@@ -173,6 +173,8 @@ app.get('/build-video', async (req, res) => {
       .audioCodec('aac')          // Ensure audio codec is set to AAC
       .outputOptions([
         '-pix_fmt', 'yuv420p', // Set pixel format for compatibility
+        '-map', '0:v:0',       // Map the video stream
+        '-map', '1:a:0',       // Map the audio stream
       ])
       .on('start', (cmd) => {
         console.log(`FFmpeg process started with command: ${cmd}`);
