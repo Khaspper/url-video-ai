@@ -17,17 +17,11 @@ const openai = new OpenAI({
 ffmpeg.setFfmpegPath(ffmpegPath);
 const app = express();
 app.use(cors());
+app.use(express.static('stories'))
 
 const g = new GPTScript({
   apiKey: process.env.OPENAI_API_KEY,
 });
-
-// List of Minecraft parkour video URLs and their durations in seconds
-const videoUrls = [
-  { url: "https://youtu.be/85z7jqGAGcc", duration: 7210 }, // Example duration
-  { url: "https://youtu.be/i0M4ARe9v0Y", duration: 300 },  // Example duration
-  // Add more videos here with their durations
-];
 
 // Function to generate a random time frame
 function getRandomStartTime(videoDuration) {
@@ -135,7 +129,7 @@ app.get('/create-story', async (req, res) => {
 app.get('/build-video', async (req, res) => {
   const id = '1ckuqu6z8m4faiql1';
   const dir = './stories/' + id;
-  const videoDir = './videos/';
+  const videoDir = './stories/videos/';
 
   const inputVideo = path.join(videoDir, 'minecraft_parkour.mp4');
   const inputAudio = path.join(dir, 'voiceover.mp3');
@@ -195,10 +189,7 @@ app.get('/build-video', async (req, res) => {
   });
 
   // Send success response
-  res.json({
-    message: 'Video processing completed successfully.',
-    outputVideoPath,
-  });
+  res.json(outputVideoPath);
 });
 
 app.listen(8080, () => console.log('Listening on port 8080'));
