@@ -34,7 +34,7 @@ app.get('/test', (req, res) => {
 });
 
 app.get('/create-story', async (req, res) => {
-  const url = req.query.url;
+  const url = decodeURIComponent(req.query.url);
   const dir = uniqid();
   const path = './stories/' + dir;
   fs.mkdirSync(path, { recursive: true });
@@ -128,6 +128,11 @@ app.get('/create-story', async (req, res) => {
 
 app.get('/build-video', async (req, res) => {
   const id = '1ckuqu6z8m4faiql1';
+  // const id = req.query.id;
+
+  if (!id) {
+    res.json('Error!! Missing ID')
+  }
   const dir = './stories/' + id;
   const videoDir = './stories/videos/';
 
@@ -189,7 +194,7 @@ app.get('/build-video', async (req, res) => {
   });
 
   // Send success response
-  res.json(outputVideoPath);
+  res.json(`${id}/output.mp4`);
 });
 
 app.listen(8080, () => console.log('Listening on port 8080'));
