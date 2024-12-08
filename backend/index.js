@@ -86,12 +86,39 @@ app.get('/create-story', async (req, res) => {
     fs.writeFileSync(speechPath, buffer);
     console.log(`Saved the speech to ${speechPath}`);
 
-    // Return success response with paths to story and speech files
+    // Transcribe the audio using OpenAI Whisper API
+    const simplifiedTranscriptPath = `${path}/simplified_transcription.json`; // Save simplified transcription
+    try {
+      const transcriptionResponse = await openai.audio.transcriptions.create({
+        file: fs.createReadStream(speechPath), // Pass the audio file as a stream
+        model: "whisper-1",                   // Specify the Whisper model
+        response_format: "verbose_json",      // Ensure detailed word-level timestamps
+      });
+
+      // Simplify transcription response to include only words with their start and end times
+      const simplifiedTranscription = [];
+      transcriptionResponse.segments.forEach(segment => {
+        segment.text.split(' ').forEach((word, index) => {
+          const wordStart = segment.start + ((segment.end - segment.start) / segment.text.split(' ').length) * index;
+          const wordEnd = wordStart + ((segment.end - segment.start) / segment.text.split(' ').length);
+          simplifiedTranscription.push({ word: word.trim(), start: wordStart, end: wordEnd });
+        });
+      });
+
+      // Save the simplified transcription
+      fs.writeFileSync(simplifiedTranscriptPath, JSON.stringify(simplifiedTranscription, null, 2));
+      console.log(`Saved the simplified transcription to ${simplifiedTranscriptPath}`);
+    } catch (transcriptionError) {
+      console.error("Error transcribing audio:", transcriptionError);
+    }
+
+    // Return success response with paths to story, speech, and transcription files
     return res.json({
       storyPath,
       videoPath,
       video: videoWithTime,
       speechPath,
+      simplifiedTranscriptPath,
     });
   } catch (e) {
     console.error(e);
