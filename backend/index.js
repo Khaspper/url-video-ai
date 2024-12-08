@@ -138,7 +138,6 @@ app.get('/build-video', async (req, res) => {
   const videoDir = './videos/';
 
   const inputVideo = path.join(videoDir, 'minecraft_parkour.mp4');
-  // const inputVideo = path.join(videoDir, 'videoplayback.mp4');
   const inputAudio = path.join(dir, 'voiceover.mp3');
   const inputTranscription = path.join(dir, 'simplified_transcription.json');
   const outputVideoPath = path.join(dir, 'output.mp4');
@@ -146,35 +145,37 @@ app.get('/build-video', async (req, res) => {
   // Read transcription file and parse it
   const transcription = JSON.parse(fs.readFileSync(inputTranscription, 'utf8'));
   const words = transcription.words;
-  const duration = transcription.duration;
+  const duration = parseFloat(transcription.duration).toFixed(2);
 
   // Generate a random start time for the video
-  const videoDuration = duration; // Assume 8 minutes (480 seconds), replace dynamically if needed
+  const videoDuration = duration;
   const maxStartTime = Math.max(0, videoDuration - duration);
   const startTime = Math.floor(Math.random() * maxStartTime);
 
-  // Build the drawtext filter string
-  let drawtextFilter = '';
-  words.forEach((wordInfo) => {
-    const word = wordInfo.word.replace(/'/g, "\\'").replace(/"/g, '\\"');
-    const start = parseFloat(wordInfo.start).toFixed(2);
-    const end = parseFloat(wordInfo.end).toFixed(2);
-    drawtextFilter += `drawtext=text='${word}':fontcolor=white:fontsize=96:borderw=4:bordercolor=black:x=(w-text_w)/2:y=(h*3/4)-text_h:enable='between(t\\,${start}\\,${end})',`;
-  });
-  drawtextFilter = drawtextFilter.slice(0, -1); // Remove trailing comma
-
-  console.log(`Processing video from ${startTime}s for ${duration}s with text overlay...`);
+  console.log(`Processing video from ${startTime}s for ${duration}s with synchronized captions...`);
 
   await new Promise((resolve, reject) => {
+    // Build a new drawtext filter for synchronized captions
+    let syncDrawtextFilter = words.map((wordInfo) => {
+      const offset = 0.1; // Adjust this value to sync captions (positive for delay, negative for advance)
+      const word = wordInfo.word.replace(/'/g, "\\'").replace(/\"/g, '\\"');
+      const start = (parseFloat(wordInfo.start) + offset).toFixed(2);
+      const end = (parseFloat(wordInfo.end) + offset).toFixed(2);
+      return `drawtext=text='${word}':fontcolor=white:fontsize=96:borderw=4:bordercolor=black:x=(w-text_w)/2:y=(h*3/4)-text_h:enable='between(t\\,${start}\\,${end})'`;
+    }).join(',');
+
     ffmpeg(inputVideo)
       .setStartTime(startTime) // Start time for the video
       .setDuration(videoDuration)  // Clip the video to match the videoDuration
       .input(inputAudio)          // Add the audio file as input
+      .audioFilters('adelay=500|500') // Add a half-second (500 ms) audio delay
       .audioCodec('aac')          // Ensure audio codec is set to AAC
       .outputOptions([
-        '-pix_fmt', 'yuv420p', // Set pixel format for compatibility
-        '-map', '0:v:0',       // Map the video stream
-        '-map', '1:a:0',       // Map the audio stream
+        '-pix_fmt', 'yuv420p',
+        '-map', '0:v:0',
+        '-map', '1:a:0',
+        '-vf', syncDrawtextFilter,
+        '-async', '1' // Synchronize audio and video
       ])
       .on('start', (cmd) => {
         console.log(`FFmpeg process started with command: ${cmd}`);
@@ -198,10 +199,7 @@ app.get('/build-video', async (req, res) => {
     message: 'Video processing completed successfully.',
     outputVideoPath,
   });
-  
 });
-
-
 
 app.listen(8080, () => console.log('Listening on port 8080'));
 
